@@ -1,0 +1,22 @@
+services:
+  db:
+    container_name: db
+    environment:
+      - POSTGRES_DB=pluton_db
+      - POSTGRES_USER=produser
+      - POSTGRES_PASSWORD=prodpassword
+    volumes:
+      - pluton-data:/var/lib/postgresql/data
+    networks:
+      - pluton-network
+  server:
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+    networks:
+      - pluton-network
+
+volumes:
+  pluton-data:
+
+networks:
+  pluton-network:
