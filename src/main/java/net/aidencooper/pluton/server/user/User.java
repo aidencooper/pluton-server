@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 @Entity
-@EntityListeners(AuditingEntityListener.class) // Used for auditing metadata annotations (@CreatedData and @LastModifiedDate)
+@EntityListeners(AuditingEntityListener.class)
 @Table(name = "users")
 @Getter
 @Setter
@@ -19,43 +19,29 @@ import java.util.*;
 @NoArgsConstructor
 public class User {
     @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
     @Column(nullable = false, updatable = false)
-    private UUID id = UUID.randomUUID();
+    private UUID id;
 
     @Column(nullable = false, unique = true)
-    private String username;
-
-    @Column(nullable = false)
-    private String password;
-
-    @Column(unique = true)
     private String email;
 
+    private String password;
+
     @Column(nullable = false)
-    private Set<? extends GrantedAuthority> authorities = new HashSet<>();
+    private Set<? extends GrantedAuthority> authorities;
 
     @CreatedDate
     @Column(nullable = false, updatable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
+    private LocalDateTime createdAt;
 
     @LastModifiedDate
     @Column(nullable = false)
-    private LocalDateTime updatedAt = LocalDateTime.now();
+    private LocalDateTime updatedAt;
 
-    public User(final String username, final String password) {
-        this.username = username;
+    public User(String email, String password, GrantedAuthority... authorities) {
+        this.email = email;
         this.password = password;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (o == null || getClass() != o.getClass()) return false;
-        User user = (User) o;
-        return Objects.equals(id, user.id) && Objects.equals(username, user.username) && Objects.equals(email, user.email);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(id, username, email, createdAt, updatedAt);
+        this.authorities = new HashSet<>(Arrays.asList(authorities));
     }
 }
