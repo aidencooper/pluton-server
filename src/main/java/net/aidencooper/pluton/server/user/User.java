@@ -5,22 +5,21 @@ import lombok.*;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
-import org.springframework.security.core.GrantedAuthority;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.*;
 
 @Entity
 @EntityListeners(AuditingEntityListener.class)
 @Table(name = "users")
-@Getter
-@Setter
+@Data
 @AllArgsConstructor
 @NoArgsConstructor
 public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    @Column(nullable = false, updatable = false)
+    @Column(nullable = false, unique = true, updatable = false)
+    @Setter(AccessLevel.NONE)
     private UUID id;
 
     @Column(nullable = false, unique = true)
@@ -28,20 +27,17 @@ public class User {
 
     private String password;
 
-    @Column(nullable = false)
-    private Set<? extends GrantedAuthority> authorities;
-
     @CreatedDate
     @Column(nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    @Setter(AccessLevel.NONE)
+    private Instant createdAt;
 
     @LastModifiedDate
     @Column(nullable = false)
-    private LocalDateTime updatedAt;
+    private Instant updatedAt;
 
-    public User(String email, String password, GrantedAuthority... authorities) {
+    public User(String email, String password) {
         this.email = email;
         this.password = password;
-        this.authorities = new HashSet<>(Arrays.asList(authorities));
     }
 }
