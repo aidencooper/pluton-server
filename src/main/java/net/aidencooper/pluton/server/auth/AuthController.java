@@ -6,9 +6,10 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import net.aidencooper.pluton.server.auth.request.RegisterRequest;
+import net.aidencooper.pluton.server.exception.EmailTakenException;
 import net.aidencooper.pluton.server.exception.InvalidPasswordException;
-import net.aidencooper.pluton.server.constant.RestResponse;
-import net.aidencooper.pluton.server.exception.UserExistsException;
+import net.aidencooper.pluton.server.constant.Responses;
+import net.aidencooper.pluton.server.exception.UsernameTakenException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -30,7 +31,7 @@ public class AuthController {
                                     mediaType = "application/json",
                                     schema = @Schema(type = "string")
                             ),
-                            description = RestResponse.Success.REGISTERED,
+                            description = Responses.Success.REGISTERED,
                             responseCode = "201"
                     ),
                     @ApiResponse(
@@ -38,7 +39,7 @@ public class AuthController {
                                     mediaType = "application/json",
                                     schema = @Schema(type = "string")
                             ),
-                            description = RestResponse.Error.USER_EXISTS,
+                            description = Responses.Error.EMAIL_TAKEN,
                             responseCode = "409"
                     ),
                     @ApiResponse(
@@ -46,7 +47,15 @@ public class AuthController {
                                     mediaType = "application/json",
                                     schema = @Schema(type = "string")
                             ),
-                            description = RestResponse.Error.INVALID_PASSWORD,
+                            description = Responses.Error.USERNAME_TAKEN,
+                            responseCode = "409"
+                    ),
+                    @ApiResponse(
+                            content = @Content(
+                                    mediaType = "application/json",
+                                    schema = @Schema(type = "string")
+                            ),
+                            description = Responses.Error.INVALID_PASSWORD,
                             responseCode = "422"
                     )
             }
@@ -55,11 +64,14 @@ public class AuthController {
     public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest registerRequest) {
         try {
             this.authService.register(registerRequest);
-        } catch (UserExistsException exception) {
-            return ResponseEntity.status(409).body(RestResponse.Error.USER_EXISTS);
+        } catch (EmailTakenException exception) {
+            return ResponseEntity.status(409).body(Responses.Error.EMAIL_TAKEN);
+        } catch (UsernameTakenException exception) {
+            return ResponseEntity.status(409).body(Responses.Error.USERNAME_TAKEN);
         } catch (InvalidPasswordException exception) {
-            return ResponseEntity.status(422).body(RestResponse.Error.INVALID_PASSWORD);
+            return ResponseEntity.status(422).body(Responses.Error.INVALID_PASSWORD);
         }
-        return ResponseEntity.status(201).body(RestResponse.Success.REGISTERED);
+
+        return ResponseEntity.status(201).body(Responses.Success.REGISTERED);
     }
 }

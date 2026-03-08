@@ -5,6 +5,8 @@ import lombok.*;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
 
 import java.time.Instant;
 import java.util.*;
@@ -15,7 +17,7 @@ import java.util.*;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class User {
+public class User implements UserDetails {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(nullable = false, unique = true, updatable = false)
@@ -34,10 +36,19 @@ public class User {
     @Column(nullable = false)
     private boolean enabled;
 
-    @Column
+    @Column(nullable = false)
+    private boolean expired;
+
+    @Column(nullable = false)
+    private boolean credentialsExpired;
+
+    @Column(nullable = false)
+    private boolean locked;
+
+    @Column(name = "verification_code")
     private int verificationCode;
 
-    @Column
+    @Column(name = "verification_expiration")
     private Instant verificationExpiration;
 
     @CreatedDate
@@ -52,5 +63,26 @@ public class User {
     public User(String email, String password) {
         this.email = email;
         this.password = password;
+    }
+
+    @Override
+    @NonNull
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return List.of();
+    }
+
+    @Override
+    public boolean isAccountNonExpired() {
+        return !this.isExpired();
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return !this.isLocked();
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return !this.isCredentialsExpired();
     }
 }

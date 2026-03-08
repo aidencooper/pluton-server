@@ -3,9 +3,6 @@ package net.aidencooper.pluton.server.auth;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
-import java.util.List;
-
 @Component
 public class PasswordValidator {
     private final int minLength;
@@ -28,19 +25,15 @@ public class PasswordValidator {
         this.requireSpecial = requireSpecial;
     }
 
-    public List<String> validate(String password) {
-        List<String> errors = new ArrayList<>();
+    public boolean isValid(String password) {
+        if(password == null || password.isBlank()) return false;
+        if (password.length() < minLength) return false;
+        if (requireUppercase && password.chars().noneMatch(Character::isUpperCase)) return false;
+        if (requireLowercase && password.chars().noneMatch(Character::isLowerCase)) return false;
+        if (requireDigit && password.chars().noneMatch(Character::isDigit)) return false;
+        if (requireSpecial && password.chars().allMatch((character) -> Character.isLetterOrDigit(character) || Character.isWhitespace(character))) return false;
 
-        if(password == null || password.isBlank()) errors.add("Password cannot be blank");
-        else {
-            if (password.length() < minLength) errors.add("Password must be at least " + minLength + " characters long");
-            if (requireUppercase && password.chars().noneMatch(Character::isUpperCase)) errors.add("Password must have at least one uppercase character");
-            if (requireLowercase && password.chars().noneMatch(Character::isLowerCase)) errors.add("Password must have at least one lowercase character");
-            if (requireDigit && password.chars().noneMatch(Character::isDigit)) errors.add("Password must have at least one digit");
-            if (requireSpecial && password.chars().allMatch((character) -> Character.isLetterOrDigit(character) || Character.isWhitespace(character))) errors.add("Password must have at least one special character");
-        }
-
-        return errors;
+        return true;
     }
 }
 
