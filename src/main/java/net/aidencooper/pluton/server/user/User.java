@@ -25,7 +25,20 @@ public class User {
     @Column(nullable = false, unique = true)
     private String email;
 
+    @Column(nullable = false, unique = true)
+    private String username;
+
+    @Column
     private String password;
+
+    @Column(nullable = false)
+    private boolean enabled;
+
+    @Column
+    private int verificationCode;
+
+    @Column
+    private Instant verificationExpiration;
 
     @CreatedDate
     @Column(nullable = false, updatable = false)
