@@ -18,15 +18,26 @@ repositories {
 }
 
 dependencies {
+	// JDBC
 	implementation("org.springframework.boot:spring-boot-starter-data-jdbc")
-	implementation("org.springframework.boot:spring-boot-starter-restclient")
-	implementation("org.springframework.boot:spring-boot-starter-webmvc")
-	developmentOnly("org.springframework.boot:spring-boot-docker-compose")
 	testImplementation("org.springframework.boot:spring-boot-starter-data-jdbc-test")
+
+	// Rest Client
+	implementation("org.springframework.boot:spring-boot-starter-restclient")
 	testImplementation("org.springframework.boot:spring-boot-starter-restclient-test")
+	
+	// Web MVC
+	implementation("org.springframework.boot:spring-boot-starter-webmvc")
 	testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+
+	// Docker Compose
+	developmentOnly("org.springframework.boot:spring-boot-docker-compose")
+
+	// Test Containers
 	testImplementation("org.springframework.boot:spring-boot-testcontainers")
 	testImplementation("org.testcontainers:testcontainers-junit-jupiter")
+
+	// JUnit
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
