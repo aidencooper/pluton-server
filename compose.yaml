@@ -1,10 +1,28 @@
 services: 
   postgres:
     image: postgres:latest
-    container_name: pluton-db
+    container_name: pluton-postgres
     environment:
+      - POSTGRES_DB=pluton
       - POSTGRES_USER=test
       - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=pluton
+      - PGDATA=/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pluton-pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=test@test.com
+      - PGADMIN_DEFAULT_PASSWORD=password
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadata:/var/lib/pgadmin
+
+volumes:
+  pgdata:
+  pgadata:

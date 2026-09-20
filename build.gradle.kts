@@ -43,6 +43,10 @@ dependencies {
 
 	// PostgreSQL 
 	runtimeOnly("org.postgresql:postgresql")
+
+	// Security
+	implementation("org.springframework.boot:spring-boot-starter-security")
+	testImplementation("org.springframework.boot:spring-boot-starter-security-test")
 }
 
 // JUnit
