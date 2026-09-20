@@ -1,1 +1,10 @@
-services: {}
+services: 
+  postgres:
+    image: postgres:latest
+    container_name: pluton-db
+    environment:
+      - POSTGRES_USER=test
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=pluton
+    ports:
+      - "5432:5432"

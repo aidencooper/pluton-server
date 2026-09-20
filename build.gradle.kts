@@ -36,11 +36,16 @@ dependencies {
 	// Test Containers
 	testImplementation("org.springframework.boot:spring-boot-testcontainers")
 	testImplementation("org.testcontainers:testcontainers-junit-jupiter")
+	testImplementation("org.testcontainers:testcontainers-postgresql")
 
 	// JUnit
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+
+	// PostgreSQL 
+	runtimeOnly("org.postgresql:postgresql")
 }
 
+// JUnit
 tasks.withType<Test> {
 	useJUnitPlatform()
 }
