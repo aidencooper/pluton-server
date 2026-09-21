@@ -19,5 +19,5 @@ class PlutonServerApplicationTests {
 	void contextLoads() {
 		assertThat(postgres.isRunning()).isTrue();
 	}
-
+	
 }

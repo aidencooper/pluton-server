@@ -1,4 +1,4 @@
-package net.aidencooper.pluton_server.auth;
+package net.aidencooper.pluton_server.security.auth;
 
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
