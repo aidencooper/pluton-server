@@ -65,8 +65,8 @@ public class AuthController {
         }
     }
 
-    @PostMapping("logout")
-    public ResponseEntity<Void> logout(@RequestBody String refreshToken) {
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(@RequestParam String refreshToken) {
         this.refreshTokenService.revoke(refreshToken);
         return ResponseEntity.ok().build();
     }

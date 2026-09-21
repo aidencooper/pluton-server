@@ -4,6 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.notIn;
 
 import java.net.http.HttpRequest;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
@@ -28,12 +32,16 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import tools.jackson.databind.ObjectMapper;
+
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureTestRestTemplate
 @Testcontainers 
 public class AuthControllerIT {
     private static final String LOGIN_ENDPOINT = "/api/v1/auth/login";
     private static final String REGISTER_ENDPOINT = "/api/v1/auth/register";
+    private static final String REFRESH_ENDPOINT = "/api/v1/auth/refresh";
+    private static final String LOGOUT_ENDPOINT = "/api/v1/auth/logout";
     private static final String TEST_PROTECTED_ENDPOINT = "/api/v1/test";
 
     @Container 
@@ -49,8 +57,12 @@ public class AuthControllerIT {
     @Autowired 
     private JwtEncoder jwtEncoder;
 
+    @Autowired 
+    private ObjectMapper objectMapper;
+
     @BeforeEach 
     void cleanDb() {
+        jdbcTemplate.execute("DELETE FROM refresh_tokens");
         jdbcTemplate.execute("DELETE FROM authorities");
         jdbcTemplate.execute("DELETE FROM users");
     }  
@@ -70,6 +82,31 @@ public class AuthControllerIT {
         HttpEntity<Void> request = new HttpEntity<>(headers);
 
         return this.restTemplate.postForEntity(url, request, String.class);
+    }
+
+    private TokenResponse loginAndParse(String username, String password) {
+        String body = this.login(username, password).getBody();
+        return this.objectMapper.readValue(body, TokenResponse.class);
+    }
+
+    private ResponseEntity<String> refresh(String refreshToken) {
+        String url = REFRESH_ENDPOINT + "?refreshToken=" + refreshToken;
+        return this.restTemplate.postForEntity(url, null, String.class);
+    }
+
+    private ResponseEntity<Void> logout(String refreshToken) {
+        String url = LOGOUT_ENDPOINT + "?refreshToken=" + refreshToken;
+        return this.restTemplate.postForEntity(url, null, Void.class);
+    }
+
+    private String hashRefreshToken(String rawToken) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hashed = digest.digest(rawToken.getBytes(StandardCharsets.UTF_8));
+            return Base64.getUrlEncoder().encodeToString(hashed);
+        } catch(NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 not available", exception);
+        }
     }
 
     // Register
@@ -135,17 +172,17 @@ public class AuthControllerIT {
     // Login
 
     @Test 
-    void login_withValidCredentials_returnsJwt() {
+    void login_withValidCredentials_returnsAccessAndRefreshTokens() {
         final String username = "test";
         final String password = "password";
 
         this.register(username, password);
 
-        ResponseEntity<String> response = this.login(username, password);
+        TokenResponse tokens = this.loginAndParse(username, password);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).isNotBlank();
-        assertThat(response.getBody().split("\\.")).hasSize(3); // 3 parts seperated by dots
+        assertThat(tokens.accessToken()).isNotBlank();
+        assertThat(tokens.accessToken().split("\\.")).hasSize(3);
+        assertThat(tokens.refreshToken()).isNotBlank();
     }
 
     @Test 
@@ -155,13 +192,32 @@ public class AuthControllerIT {
 
         this.register(username, password);
 
-        String token = this.login(username, password).getBody();
+        TokenResponse tokens = this.loginAndParse(username, password);
 
-        String[] parts = token.split("\\.");
+        String[] parts = tokens.accessToken().split("\\.");
         String json = new String(Base64.getUrlDecoder().decode(parts[1]));
 
         assertThat(json).contains("\"sub\":\"" + username + "\"");
         assertThat(json).contains("ROLE_USER");
+    }
+
+    @Test 
+    void login_persistsRefreshTokenHash() throws Exception {
+        final String username = "test";
+        final String password = "password";
+
+        this.register(username, password);
+        TokenResponse tokens = this.loginAndParse(username, password);
+
+        String expectedHash = this.hashRefreshToken(tokens.refreshToken());
+
+        Integer count = this.jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM refresh_tokens WHERE token_hash = ?", Integer.class, expectedHash);
+        assertThat(count).isEqualTo(1);
+
+        String storedHash = this.jdbcTemplate.queryForObject(
+            "SELECT token_hash FROM refresh_tokens WHERE token_hash = ?", String.class, expectedHash);
+        assertThat(storedHash).isNotEqualTo(tokens.refreshToken());
     }
 
     @Test 
@@ -204,6 +260,146 @@ public class AuthControllerIT {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
+    // Refresh
+
+    @Test 
+    void refresh_withValidToken_returnsNewAccessAndRefreshTokens() throws Exception {
+        final String username = "test";
+        final String password = "password";
+
+        this.register(username, password);
+        TokenResponse tokens = this.loginAndParse(username, password);
+
+        ResponseEntity<String> response = this.refresh(tokens.refreshToken());
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        TokenResponse refreshedTokens = this.objectMapper.readValue(response.getBody(), TokenResponse.class);
+
+        assertThat(refreshedTokens.accessToken()).isNotBlank();
+        assertThat(refreshedTokens.refreshToken()).isNotBlank();
+        assertThat(refreshedTokens.refreshToken()).isNotEqualTo(tokens.refreshToken());
+    }
+
+    @Test 
+    void refresh_newAccessToken_isAcceptedOnProtectedEndpoint() throws Exception {
+        final String username = "test";
+        final String password = "password";
+
+        this.register(username, password);
+        TokenResponse tokens = this.loginAndParse(username, password);
+
+        ResponseEntity<String> response = this.refresh(tokens.refreshToken());
+        TokenResponse refreshedTokens = this.objectMapper.readValue(response.getBody(), TokenResponse.class);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(refreshedTokens.accessToken());
+        HttpEntity<Void> request = new HttpEntity<>(headers);
+
+        ResponseEntity<String> protectedResponse = this.restTemplate.exchange(
+            TEST_PROTECTED_ENDPOINT, HttpMethod.GET, request, String.class);
+        
+        assertThat(protectedResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void refresh_rotatesToken_oldTokenCannotBeReused() {
+        final String username = "test";
+        final String password = "password";
+
+        this.register(username, password);
+        TokenResponse tokens = this.loginAndParse(username, password);
+
+        ResponseEntity<String> refresh1 = this.refresh(tokens.refreshToken());
+        assertThat(refresh1.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        ResponseEntity<String> refresh2 = this.refresh(tokens.refreshToken());
+        assertThat(refresh2.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test 
+    void refresh_withUnrecognizedToken_returnsUnauthorized() {
+        ResponseEntity<String> response = this.refresh("this-token-was-never-issued");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    void refresh_withExpiredToken_returnsUnauthorized() throws Exception {
+        final String username = "test";
+        final String password = "password";
+
+        this.register(username, password);
+        TokenResponse tokens = this.loginAndParse(username, password);
+
+        String hash = this.hashRefreshToken(tokens.refreshToken());
+        Timestamp past = Timestamp.from(Instant.now().minus(1, ChronoUnit.DAYS));
+        this.jdbcTemplate.update(
+            "UPDATE refresh_tokens SET expires_at = ? WHERE token_hash = ?", past, hash);
+
+        ResponseEntity<String> response = this.refresh(tokens.refreshToken());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void refresh_afterUserLogsInTwice_bothRefreshTokensRemainIndependentlyValid() throws Exception {
+        final String username = "test";
+        final String password = "password";
+
+        this.register(username, password);
+        TokenResponse tokens1 = this.loginAndParse(username, password);
+        TokenResponse tokens2 = this.loginAndParse(username, password);
+
+        assertThat(tokens1.refreshToken()).isNotEqualTo(tokens2.refreshToken());
+
+        ResponseEntity<String> refresh1 = this.refresh(tokens1.refreshToken());
+        ResponseEntity<String> refresh2 = this.refresh(tokens2.refreshToken());
+
+        assertThat(refresh1.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(refresh2.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    // Logout
+
+    @Test
+    void logout_revokesToken_subsequentRefreshFails() throws Exception {
+        final String username = "test";
+        final String password = "password";
+
+        this.register(username, password);
+        TokenResponse tokens = this.loginAndParse(username, password);
+
+        ResponseEntity<Void> logoutResponse = this.logout(tokens.refreshToken());
+        assertThat(logoutResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        ResponseEntity<String> refreshResponse = this.refresh(tokens.refreshToken());
+        assertThat(refreshResponse.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void logout_withUnknownToken_stillReturnsOk() {
+        ResponseEntity<Void> response = this.logout("never-issued-token");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void logout_doesNotAffectOtherSessionsForSameUser() throws Exception {
+        final String username = "test";
+        final String password = "password";
+
+        this.register(username, password);
+        TokenResponse tokens1 = this.loginAndParse(username, password);
+        TokenResponse tokens2 = this.loginAndParse(username, password);
+
+        this.logout(tokens1.refreshToken());
+
+        ResponseEntity<String> refresh1 = this.refresh(tokens1.refreshToken());
+        ResponseEntity<String> refresh2 = this.refresh(tokens2.refreshToken());
+
+        assertThat(refresh1.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(refresh2.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
     // Protected Endpoint
     @Test 
     void issuedToken_isAcceptedAsBearerTokenOnProtectedEndpoint_returnsOk() {
@@ -211,10 +407,10 @@ public class AuthControllerIT {
         final String password = "password";
 
         this.register(username, password);
-        String token = this.login(username, password).getBody();
+        TokenResponse tokens = this.loginAndParse(username, password);
 
         HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(token);
+        headers.setBearerAuth(tokens.accessToken());
         HttpEntity<Void> request = new HttpEntity<>(headers);
 
         ResponseEntity<String> response = this.restTemplate.exchange(TEST_PROTECTED_ENDPOINT, HttpMethod.GET, request, String.class); // .getForEntity doesn't accept request
