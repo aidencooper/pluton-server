@@ -47,6 +47,13 @@ dependencies {
 	// Security
 	implementation("org.springframework.boot:spring-boot-starter-security")
 	testImplementation("org.springframework.boot:spring-boot-starter-security-test")
+
+	// OAuth2 Resource Server
+	implementation("org.springframework.boot:spring-boot-starter-security-oauth2-resource-server")
+	testImplementation("org.springframework.boot:spring-boot-starter-security-oauth2-resource-server-test")
+	
+	// Configuration Processor
+	annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
 }
 
 // JUnit
