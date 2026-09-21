@@ -4,7 +4,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
-import net.aidencooper.pluton_server.security.jwt.RsaKeyProperties;
+import net.aidencooper.pluton_server.security.jwt.config.RsaKeyProperties;
 
 @EnableConfigurationProperties(RsaKeyProperties.class)
 @SpringBootApplication

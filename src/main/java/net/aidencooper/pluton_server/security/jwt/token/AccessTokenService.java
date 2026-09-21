@@ -1,4 +1,4 @@
-package net.aidencooper.pluton_server.security.jwt;
+package net.aidencooper.pluton_server.security.jwt.token;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -11,10 +11,10 @@ import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.stereotype.Service;
 
 @Service 
-public class TokenService {
+public class AccessTokenService {
     private final JwtEncoder jwtEncoder;
 
-    public TokenService(JwtEncoder jwtEncoder) {
+    public AccessTokenService(JwtEncoder jwtEncoder) {
         this.jwtEncoder = jwtEncoder;
     }
 

@@ -1,4 +1,4 @@
-package net.aidencooper.pluton_server.security.jwt;
+package net.aidencooper.pluton_server.security.jwt.config;
 
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;

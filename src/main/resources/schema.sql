@@ -18,3 +18,14 @@ CREATE TABLE IF NOT EXISTS authorities (
 -- Rejected: (username=test authority=role_user | username=test authority=role_user)
 -- Accepted: (username=test authority=role_user | username=test authority=role_admin)
 CREATE UNIQUE INDEX IF NOT EXISTS ix_auth_username ON authorities (username, authority);
+
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users (id),
+    token_hash VARCHAR(64) NOT NULL UNIQUE,
+    revoked BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    expires_at TIMESTAMPTZ NOT NULL,
+)
+
+CREATE INDEX IF NOT EXISTS ix_refresh_tokens_user_id ON refresh_tokens (user_id)

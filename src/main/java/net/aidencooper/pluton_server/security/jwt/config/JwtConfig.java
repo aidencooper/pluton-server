@@ -1,4 +1,4 @@
-package net.aidencooper.pluton_server.security.jwt;
+package net.aidencooper.pluton_server.security.jwt.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
