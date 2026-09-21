@@ -1,8 +1,10 @@
 -- Matched from spring-security-core-7.1.1.jar/org.springframework.security.core.userdetails.jdbc/users.ddl
 -- Case insensitive
+-- Primary key changed from username to added id column
 
 CREATE TABLE IF NOT EXISTS users (
-    username VARCHAR(50) NOT NULL PRIMARY KEY,
+    id UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+    username VARCHAR(50) NOT NULL UNIQUE,
     password VARCHAR(500) NOT NULL,
     enabled BOOLEAN NOT NULL
 );
