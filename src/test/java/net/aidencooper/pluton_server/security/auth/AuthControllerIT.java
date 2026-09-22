@@ -121,6 +121,7 @@ public class AuthControllerIT {
         ResponseEntity<String> response = this.register(email, username, password);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(response.getBody()).contains(email);
         assertThat(response.getBody()).contains(username);
 
         Integer count = this.jdbcTemplate.queryForObject(
@@ -158,7 +159,7 @@ public class AuthControllerIT {
     }
 
     @Test 
-    void register_duplicateUsername_returns409() {
+    void register_duplicateDetails_returns409() {
         final String email = "test@test.com";
         final String username = "test";
         final String password = "password";

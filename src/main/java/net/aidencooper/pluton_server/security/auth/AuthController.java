@@ -83,7 +83,7 @@ public class AuthController {
             .build();
 
         this.userService.createUser(user);
-        return ResponseEntity.status(HttpStatus.CREATED).body("Registered: " + username);
+        return ResponseEntity.status(HttpStatus.CREATED).body("Registered: " + email + " " + username);
     }
     
     
