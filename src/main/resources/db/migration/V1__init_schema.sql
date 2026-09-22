@@ -5,7 +5,8 @@
 CREATE TABLE users (
     id UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
     username VARCHAR(50) NOT NULL UNIQUE,
-    password VARCHAR(500) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password VARCHAR(500),
     enabled BOOLEAN NOT NULL
 );
 
@@ -29,3 +30,14 @@ CREATE TABLE refresh_tokens (
 );
 
 CREATE INDEX ix_refresh_tokens_user_id ON refresh_tokens (user_id);
+
+CREATE TABLE oauth_accounts (
+    id UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id NOT NULL REFERENCES users (id),
+    provider VARCHAR(20) NOT NULL,
+    provider_user_id VARCHAR(255) NOT NULL,
+
+    UNIQUE (provider, provider_user_id)
+);
+
+CREATE INDEX ix_oauth_accounts_user_id ON oauth_accounts (user_id);
