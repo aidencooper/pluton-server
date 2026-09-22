@@ -1,5 +1,7 @@
 package net.aidencooper.pluton_server.security.user;
 
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -19,6 +21,10 @@ public class User implements UserDetails {
     private final String password;
     private final Collection<? extends GrantedAuthority> authorities;
     private final boolean enabled;
+    private final boolean expired;
+    private final boolean locked;
+    private final boolean passwordExpired;
+    private final Timestamp createdAt;
 
     public User(
         UUID id,
@@ -26,7 +32,11 @@ public class User implements UserDetails {
         String username,
         String password,
         Collection<? extends GrantedAuthority> authorities,
-        boolean enabled
+        boolean enabled,
+        boolean expired,
+        boolean locked,
+        boolean passwordExpired,
+        Timestamp createdAt
     ) {
         this.id = id;
         this.email = email;
@@ -34,6 +44,10 @@ public class User implements UserDetails {
         this.password = password;
         this.authorities = authorities;
         this.enabled = enabled;
+        this.expired = expired;
+        this.locked = locked;
+        this.passwordExpired = passwordExpired;
+        this.createdAt = createdAt;
     }
 
     public UUID getId() { return this.id; }
@@ -42,6 +56,10 @@ public class User implements UserDetails {
     @Override public @Nullable String getPassword() { return this.password; }
     @Override public Collection<? extends GrantedAuthority> getAuthorities() { return this.authorities; }
     @Override public boolean isEnabled() { return this.enabled; }
+    @Override public boolean isAccountNonExpired() { return !this.expired; }
+    @Override public boolean isAccountNonLocked() { return !this.locked; }
+    @Override public boolean isCredentialsNonExpired() { return !this.passwordExpired; }
+    public Timestamp getCreatedAt() { return this.createdAt; }
 
     public static UserBuilder with(String email, String username) {
         return new UserBuilder().email(email).username(username);
@@ -53,6 +71,9 @@ public class User implements UserDetails {
         private String password;
         private List<GrantedAuthority> authorities;
         private boolean enabled = true;
+        private boolean expired = false;
+        private boolean locked = false;
+        private boolean passwordExpired = false;
 
         public UserBuilder email(String email) {
             Assert.notNull(email, "email cannot be null");
@@ -97,10 +118,25 @@ public class User implements UserDetails {
 			return this;
 		}
 
+        public UserBuilder expired(boolean expired) {
+			this.expired = expired;
+			return this;
+		}
+
+        public UserBuilder locked(boolean locked) {
+			this.locked = locked;
+			return this;
+		}
+
+        public UserBuilder passwordExpired(boolean passwordExpired) {
+			this.passwordExpired = passwordExpired;
+			return this;
+		}
+
         public User build() {
             Assert.notNull(this.email, "email cannot be null");
             Assert.notNull(this.username, "username cannot be null");
-            return new User(UUID.randomUUID(), this.email, this.username, this.password, this.authorities, this.enabled);
+            return new User(UUID.randomUUID(), this.email, this.username, this.password, this.authorities, this.enabled, this.expired, this.locked, this.passwordExpired, Timestamp.from(Instant.now()));
         }
     }
 }
