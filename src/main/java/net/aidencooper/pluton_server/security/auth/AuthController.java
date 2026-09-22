@@ -7,16 +7,15 @@ import org.springframework.web.bind.annotation.RestController;
 import net.aidencooper.pluton_server.security.jwt.token.AccessTokenService;
 import net.aidencooper.pluton_server.security.jwt.token.InvalidRefreshTokenException;
 import net.aidencooper.pluton_server.security.jwt.token.RefreshTokenService;
+import net.aidencooper.pluton_server.security.user.User;
+import net.aidencooper.pluton_server.security.user.UserService;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.provisioning.UserDetailsManager;
 import org.springframework.web.bind.annotation.PostMapping;
 
 
@@ -26,13 +25,13 @@ import org.springframework.web.bind.annotation.PostMapping;
 public class AuthController {
     private final AccessTokenService accessTokenService;
     private final RefreshTokenService refreshTokenService;
-    private final UserDetailsManager userDetailsManager;
+    private final UserService userService;
     private final PasswordEncoder passwordEncoder;
 
-    public AuthController(AccessTokenService accessTokenService, RefreshTokenService refreshTokenService, UserDetailsManager userDetailsManager, PasswordEncoder passwordEncoder) {
+    public AuthController(AccessTokenService accessTokenService, RefreshTokenService refreshTokenService, UserService userService, PasswordEncoder passwordEncoder) {
         this.accessTokenService = accessTokenService;
         this.refreshTokenService = refreshTokenService;
-        this.userDetailsManager = userDetailsManager;
+        this.userService = userService;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -52,7 +51,7 @@ public class AuthController {
         try {
             String username = this.refreshTokenService.validateAndRotate(refreshToken);
 
-            UserDetails user = this.userDetailsManager.loadUserByUsername(username);
+            User user = this.userService.loadUserByUsername(username);
             Authentication newAuthentication = new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
 
             String newAccessToken = this.accessTokenService.generateToken(newAuthentication);
@@ -74,18 +73,18 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<String> register(@RequestParam String email, @RequestParam String username, @RequestParam String password) {
-        if(userDetailsManager.userExists(username))
-            
+        if(this.userService.userExists(username))
             return ResponseEntity.status(HttpStatus.CONFLICT).body("User already exists: " + username);
-
-        UserDetails user = User
-            .withUsername(username)
+        
+        User user = User
+            .with(email, username)
             .password(this.passwordEncoder.encode(password))
             .roles("USER")
             .build();
-        
-        this.userDetailsManager.createUser(user);
+
+        this.userService.createUser(user);
         return ResponseEntity.status(HttpStatus.CREATED).body("Registered: " + username);
     }
+    
     
 }

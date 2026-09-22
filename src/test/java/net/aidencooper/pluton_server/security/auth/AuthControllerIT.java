@@ -70,8 +70,8 @@ public class AuthControllerIT {
 
     // Helpers
 
-    private ResponseEntity<String> register(String username, String password) {
-        String url = REGISTER_ENDPOINT + "?username=" + username + "&password=" + password;
+    private ResponseEntity<String> register(String email, String username, String password) {
+        String url = REGISTER_ENDPOINT + "?email=" + email + "&username=" + username + "&password=" + password;
         return this.restTemplate.postForEntity(url, null, String.class);
     }
 
@@ -114,10 +114,11 @@ public class AuthControllerIT {
 
     @Test 
     void register_newUser_returns201AndPersistsUser() {
+        final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
         
-        ResponseEntity<String> response = this.register(username, password);
+        ResponseEntity<String> response = this.register(email, username, password);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(response.getBody()).contains(username);
@@ -130,10 +131,11 @@ public class AuthControllerIT {
 
     @Test 
     void register_grantsRoleUser() {
+        final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
         
-        this.register(username, password);
+        this.register(email, username, password);
 
         String authority = this.jdbcTemplate.queryForObject(
             "SELECT authority FROM authorities WHERE username = ?", String.class, username);
@@ -143,10 +145,11 @@ public class AuthControllerIT {
 
     @Test 
     void register_storesBCryptEncodedPassword_notPlainText() {
+        final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(username, password);
+        this.register(email, username, password);
 
         String storedPassword = this.jdbcTemplate.queryForObject(
             "SELECT password FROM users WHERE username = ?", String.class, username);
@@ -156,11 +159,12 @@ public class AuthControllerIT {
 
     @Test 
     void register_duplicateUsername_returns409() {
+        final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(username, password);
-        ResponseEntity<String> secondRegister = this.register(username, password);
+        this.register(email, username, password);
+        ResponseEntity<String> secondRegister = this.register(email, username, password);
 
         assertThat(secondRegister.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
 
@@ -174,10 +178,11 @@ public class AuthControllerIT {
 
     @Test 
     void login_withValidCredentials_returnsAccessAndRefreshTokens() {
+        final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(username, password);
+        this.register(email, username, password);
 
         TokenResponse tokens = this.loginAndParse(username, password);
 
@@ -188,10 +193,11 @@ public class AuthControllerIT {
 
     @Test 
     void login_tokenContainsCorrectSubjectAndScope() {
+        final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(username, password);
+        this.register(email, username, password);
 
         TokenResponse tokens = this.loginAndParse(username, password);
 
@@ -204,10 +210,11 @@ public class AuthControllerIT {
 
     @Test 
     void login_persistsRefreshTokenHash() throws Exception {
+        final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(username, password);
+        this.register(email, username, password);
         TokenResponse tokens = this.loginAndParse(username, password);
 
         String expectedHash = this.hashRefreshToken(tokens.refreshToken());
@@ -223,10 +230,11 @@ public class AuthControllerIT {
 
     @Test 
     void login_withWrongPassword_returnsUnauthorized() {
+        final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(username, password);
+        this.register(email, username, password);
 
         ResponseEntity<String> response = this.login(username, "wrong" + password);
 
@@ -265,10 +273,11 @@ public class AuthControllerIT {
 
     @Test 
     void refresh_withValidToken_returnsNewAccessAndRefreshTokens() throws Exception {
+        final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(username, password);
+        this.register(email, username, password);
         TokenResponse tokens = this.loginAndParse(username, password);
 
         ResponseEntity<String> response = this.refresh(tokens.refreshToken());
@@ -283,10 +292,11 @@ public class AuthControllerIT {
 
     @Test 
     void refresh_newAccessToken_isAcceptedOnProtectedEndpoint() throws Exception {
+        final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(username, password);
+        this.register(email, username, password);
         TokenResponse tokens = this.loginAndParse(username, password);
 
         ResponseEntity<String> response = this.refresh(tokens.refreshToken());
@@ -304,10 +314,11 @@ public class AuthControllerIT {
 
     @Test
     void refresh_rotatesToken_oldTokenCannotBeReused() {
+        final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(username, password);
+        this.register(email, username, password);
         TokenResponse tokens = this.loginAndParse(username, password);
 
         ResponseEntity<String> refresh1 = this.refresh(tokens.refreshToken());
@@ -325,10 +336,11 @@ public class AuthControllerIT {
     }
 
     void refresh_withExpiredToken_returnsUnauthorized() throws Exception {
+        final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(username, password);
+        this.register(email, username, password);
         TokenResponse tokens = this.loginAndParse(username, password);
 
         String hash = this.hashRefreshToken(tokens.refreshToken());
@@ -343,10 +355,11 @@ public class AuthControllerIT {
 
     @Test
     void refresh_afterUserLogsInTwice_bothRefreshTokensRemainIndependentlyValid() throws Exception {
+        final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(username, password);
+        this.register(email, username, password);
         TokenResponse tokens1 = this.loginAndParse(username, password);
         TokenResponse tokens2 = this.loginAndParse(username, password);
 
@@ -363,10 +376,11 @@ public class AuthControllerIT {
 
     @Test
     void logout_revokesToken_subsequentRefreshFails() throws Exception {
+        final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(username, password);
+        this.register(email, username, password);
         TokenResponse tokens = this.loginAndParse(username, password);
 
         ResponseEntity<Void> logoutResponse = this.logout(tokens.refreshToken());
@@ -385,10 +399,11 @@ public class AuthControllerIT {
 
     @Test
     void logout_doesNotAffectOtherSessionsForSameUser() throws Exception {
+        final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(username, password);
+        this.register(email, username, password);
         TokenResponse tokens1 = this.loginAndParse(username, password);
         TokenResponse tokens2 = this.loginAndParse(username, password);
 
@@ -404,10 +419,11 @@ public class AuthControllerIT {
     // Protected Endpoint
     @Test 
     void issuedToken_isAcceptedAsBearerTokenOnProtectedEndpoint_returnsOk() {
+        final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(username, password);
+        this.register(email, username, password);
         TokenResponse tokens = this.loginAndParse(username, password);
 
         HttpHeaders headers = new HttpHeaders();
