@@ -73,8 +73,9 @@ public class AuthController {
     
 
     @PostMapping("/register")
-    public ResponseEntity<String> register(@RequestParam String username, @RequestParam String password) {
+    public ResponseEntity<String> register(@RequestParam String email, @RequestParam String username, @RequestParam String password) {
         if(userDetailsManager.userExists(username))
+            
             return ResponseEntity.status(HttpStatus.CONFLICT).body("User already exists: " + username);
 
         UserDetails user = User

@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,12 +59,14 @@ public class AuthControllerIT {
     @Autowired 
     private ObjectMapper objectMapper;
 
-    @BeforeEach 
-    void cleanDb() {
-        jdbcTemplate.execute("DELETE FROM refresh_tokens");
-        jdbcTemplate.execute("DELETE FROM authorities");
-        jdbcTemplate.execute("DELETE FROM users");
-    }  
+    @Autowired 
+    private Flyway flyway;
+
+    @BeforeEach
+    void setUp() {
+        flyway.clean();
+        flyway.migrate();
+    }
 
     // Helpers
 

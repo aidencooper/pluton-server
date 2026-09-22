@@ -1,4 +1,4 @@
-package net.aidencooper.pluton_server.security;
+package net.aidencooper.pluton_server.security.user;
 
 import javax.sql.DataSource;
 
