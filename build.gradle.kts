@@ -59,6 +59,9 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-flyway")
   	implementation("org.flywaydb:flyway-database-postgresql")
 	testImplementation("org.springframework.boot:spring-boot-starter-flyway-test")
+
+	// Actuator
+	implementation("org.springframework.boot:spring-boot-starter-actuator")
 }
 
 // JUnit

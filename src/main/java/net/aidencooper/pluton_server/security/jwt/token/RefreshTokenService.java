@@ -85,9 +85,13 @@ public class RefreshTokenService {
             "SELECT id FROM users WHERE username = ?", UUID.class, username);
     }
 
+    /**
+     * 
+     * @return
+     */
     private String generateRawToken() {
         byte[] bytes = new byte[TOKEN_BYTES];
-        SECURE_RANDOM.nextBytes(bytes);
+        SECURE_RANDOM.nextBytes(bytes); // 
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 

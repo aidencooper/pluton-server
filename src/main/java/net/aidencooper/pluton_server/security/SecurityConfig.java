@@ -22,6 +22,9 @@ public class SecurityConfig {
                     "/api/v1/auth/logout",
                     "/api/v1/auth/register"
                 ).permitAll()
+                .requestMatchers(HttpMethod.GET,
+                    "/actuator/health"
+                ).permitAll()
                 .anyRequest().authenticated()
             ).csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
