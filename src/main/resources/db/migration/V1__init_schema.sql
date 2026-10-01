@@ -20,16 +20,6 @@ CREATE TABLE authorities (
     CONSTRAINT fk_authorities_users FOREIGN KEY (username) REFERENCES users (username)
 );
 
-CREATE TABLE oauth_accounts (
-    id UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users (id),
-    provider VARCHAR(20) NOT NULL,
-    provider_user_id VARCHAR(255) NOT NULL,
-
-    UNIQUE (provider, provider_user_id)
-);
-CREATE INDEX ix_oauth_accounts_user_id ON oauth_accounts (user_id);
-
 CREATE TABLE user_profiles (
     user_id UUID NOT NULL PRIMARY KEY REFERENCES users (id),
     display_name VARCHAR(40),
