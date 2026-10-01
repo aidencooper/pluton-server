@@ -62,6 +62,9 @@ dependencies {
 
 	// Actuator
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
+
+	// Email
+	implementation("org.springframework.boot:spring-boot-starter-mail")
 }
 
 // JUnit

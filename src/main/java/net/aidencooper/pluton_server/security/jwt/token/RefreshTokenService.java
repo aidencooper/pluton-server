@@ -15,6 +15,8 @@ import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
+import net.aidencooper.pluton_server.security.crypto.TokenHasher;
+
 @Service 
 public class RefreshTokenService {
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
@@ -31,7 +33,7 @@ public class RefreshTokenService {
         UUID userId = this.getUserId(username);
 
         String rawToken = this.generateRawToken();
-        String tokenHash = this.hash(rawToken);
+        String tokenHash = TokenHasher.hash(rawToken);
         Instant expiresAt = Instant.now().plus(EXPIRY_DAYS, ChronoUnit.DAYS);
 
         this.jdbcTemplate.update(
@@ -42,7 +44,7 @@ public class RefreshTokenService {
     }
 
     public String validateAndRotate(String rawToken) {
-        String tokenHash = this.hash(rawToken);
+        String tokenHash = TokenHasher.hash(rawToken);
 
         List<Map<String, Object>> rows = this.jdbcTemplate.queryForList(
             "SELECT u.username AS username, rt.expires_at AS expires_at, rt.revoked AS revoked " +
@@ -68,7 +70,7 @@ public class RefreshTokenService {
 
     public void revoke(String rawToken) {
         this.jdbcTemplate.update(
-            "UPDATE refresh_tokens SET revoked = TRUE WHERE token_hash = ?", this.hash(rawToken)
+            "UPDATE refresh_tokens SET revoked = TRUE WHERE token_hash = ?", TokenHasher.hash(rawToken)
         );
     }
 
@@ -93,15 +95,5 @@ public class RefreshTokenService {
         byte[] bytes = new byte[TOKEN_BYTES];
         SECURE_RANDOM.nextBytes(bytes); // 
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-    }
-
-    private String hash(String rawToken) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hashed = digest.digest(rawToken.getBytes(StandardCharsets.UTF_8));
-            return Base64.getUrlEncoder().encodeToString(hashed);
-        } catch(NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 not available", exception);
-        }
     }
 }

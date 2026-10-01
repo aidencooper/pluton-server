@@ -1,5 +1,9 @@
 package net.aidencooper.pluton_server.security.auth;
 
+import net.aidencooper.pluton_server.security.email.EmailSenderService;
+import net.aidencooper.pluton_server.security.email.EmailVerificationService;
+import net.aidencooper.pluton_server.security.email.InvalidVerificationCodeException;
+
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,20 +21,26 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+
 
 @RestController
 @RequestMapping("/api/v1/auth")
 public class AuthController {
+    private final EmailSenderService emailSenderService;
+    private final EmailVerificationService emailVerificationService;
     private final AccessTokenService accessTokenService;
     private final RefreshTokenService refreshTokenService;
     private final UserService userService;
     private final PasswordEncoder passwordEncoder;
 
-    public AuthController(AccessTokenService accessTokenService, RefreshTokenService refreshTokenService, UserService userService, PasswordEncoder passwordEncoder) {
+    public AuthController(AccessTokenService accessTokenService, RefreshTokenService refreshTokenService, UserService userService, PasswordEncoder passwordEncoder, EmailVerificationService emailVerificationService, EmailSenderService emailSenderService) {
         this.accessTokenService = accessTokenService;
         this.refreshTokenService = refreshTokenService;
         this.userService = userService;
         this.passwordEncoder = passwordEncoder;
+        this.emailVerificationService = emailVerificationService;
+        this.emailSenderService = emailSenderService;
     }
 
     @PostMapping("/login")
@@ -84,5 +94,25 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.CREATED).body("Registered: " + email + " " + username);
     }
     
+    @PostMapping("/email/send-code")
+    public ResponseEntity<String> sendVerificationCode(Authentication authentication) {
+        User user = this.userService.loadUserByUsername(authentication.getName());
+        String code = this.emailVerificationService.generateCode(user.getId());
+
+        this.emailSenderService.sendVerificationCode(user.getEmail(), code);
+        return ResponseEntity.ok().build();
+    }
+    
+    @PostMapping("/email/verify")
+    public ResponseEntity<String> verifyCode(Authentication authentication, @RequestParam String code) {
+        User user = this.userService.loadUserByUsername(authentication.getName());
+
+        try {
+            this.emailVerificationService.verifyCode(user.getId(), code);
+            return ResponseEntity.ok().build();
+        } catch(InvalidVerificationCodeException exception) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(exception.getMessage());
+        }
+    }
     
 }
