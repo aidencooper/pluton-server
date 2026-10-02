@@ -25,7 +25,7 @@ public class UserService implements UserDetailsService {
     @Override
     public User loadUserByUsername(final String username) throws UsernameNotFoundException {
         List<Map<String, Object>> rows = this.jdbcTemplate.queryForList(
-            "SELECT id, email, username, password, enabled, expired, locked, password_expired, created_at FROM users WHERE username = ?", username
+            "SELECT id, email, username, password, enabled, expired, locked, password_expired, email_verified, created_at FROM users WHERE username = ?", username
         );
 
         if (rows.isEmpty())
@@ -49,6 +49,7 @@ public class UserService implements UserDetailsService {
             (boolean) row.get("expired"),
             (boolean) row.get("locked"),
             (boolean) row.get("password_expired"),
+            (boolean) row.get("email_verified"),
             (Timestamp) row.get("created_at")
         );
     }
@@ -57,7 +58,7 @@ public class UserService implements UserDetailsService {
     public void createUser(final User user) {
         this.validateUser(user);
         this.jdbcTemplate.update(
-            "INSERT INTO users (id, email, username, password, enabled, expired, locked, password_expired, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+            "INSERT INTO users (id, email, username, password, enabled, expired, locked, password_expired, email_verified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
             user.getId(),
             user.getEmail(), 
             user.getUsername(), 
@@ -66,6 +67,7 @@ public class UserService implements UserDetailsService {
             !user.isAccountNonExpired(),
             !user.isAccountNonLocked(),
             !user.isCredentialsNonExpired(),
+            user.isEmailVerified(),
             user.getCreatedAt()
         );
 

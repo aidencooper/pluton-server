@@ -1,7 +1,3 @@
--- Matched from spring-security-core-7.1.1.jar/org.springframework.security.core.userdetails.jdbc/users.ddl
--- Case insensitive
--- Primary key changed from username to added id column
-
 CREATE TABLE users (
     id UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR(255) NOT NULL UNIQUE,

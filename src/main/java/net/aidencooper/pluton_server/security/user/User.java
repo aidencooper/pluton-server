@@ -24,6 +24,7 @@ public class User implements UserDetails {
     private final boolean expired;
     private final boolean locked;
     private final boolean passwordExpired;
+    private final boolean emailVerified;
     private final Timestamp createdAt;
 
     public User(
@@ -36,6 +37,7 @@ public class User implements UserDetails {
         boolean expired,
         boolean locked,
         boolean passwordExpired,
+        boolean emailVerified,
         Timestamp createdAt
     ) {
         this.id = id;
@@ -47,6 +49,7 @@ public class User implements UserDetails {
         this.expired = expired;
         this.locked = locked;
         this.passwordExpired = passwordExpired;
+        this.emailVerified = emailVerified;
         this.createdAt = createdAt;
     }
 
@@ -59,6 +62,7 @@ public class User implements UserDetails {
     @Override public boolean isAccountNonExpired() { return !this.expired; }
     @Override public boolean isAccountNonLocked() { return !this.locked; }
     @Override public boolean isCredentialsNonExpired() { return !this.passwordExpired; }
+    public boolean isEmailVerified() { return this.emailVerified; }
     public Timestamp getCreatedAt() { return this.createdAt; }
 
     public static UserBuilder with(String email, String username) {
@@ -74,6 +78,7 @@ public class User implements UserDetails {
         private boolean expired = false;
         private boolean locked = false;
         private boolean passwordExpired = false;
+        private boolean emailVerified = false;
 
         public UserBuilder email(String email) {
             Assert.notNull(email, "email cannot be null");
@@ -133,10 +138,15 @@ public class User implements UserDetails {
 			return this;
 		}
 
+        public UserBuilder emailVerified(boolean emailVerified) {
+            this.emailVerified = emailVerified;
+            return this;
+        }
+
         public User build() {
             Assert.notNull(this.email, "email cannot be null");
             Assert.notNull(this.username, "username cannot be null");
-            return new User(UUID.randomUUID(), this.email, this.username, this.password, this.authorities, this.enabled, this.expired, this.locked, this.passwordExpired, Timestamp.from(Instant.now()));
+            return new User(UUID.randomUUID(), this.email, this.username, this.password, this.authorities, this.enabled, this.expired, this.locked, this.passwordExpired, this.emailVerified, Timestamp.from(Instant.now()));
         }
     }
 }

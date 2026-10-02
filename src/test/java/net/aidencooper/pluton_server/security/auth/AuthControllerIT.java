@@ -1,6 +1,7 @@
 package net.aidencooper.pluton_server.security.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -13,6 +14,8 @@ import java.util.Base64;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.TestRestTemplate;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
@@ -27,40 +30,48 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+
+import net.aidencooper.pluton_server.security.email.EmailSenderService;
 
 import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureTestRestTemplate
-@Testcontainers 
+@Testcontainers
 public class AuthControllerIT {
     private static final String LOGIN_ENDPOINT = "/api/v1/auth/login";
     private static final String REGISTER_ENDPOINT = "/api/v1/auth/register";
     private static final String REFRESH_ENDPOINT = "/api/v1/auth/refresh";
     private static final String LOGOUT_ENDPOINT = "/api/v1/auth/logout";
+    private static final String VERIFY_ENDPOINT = "/api/v1/auth/email/verify";
+    private static final String RESEND_ENDPOINT = "/api/v1/auth/email/resend-code";
     private static final String TEST_PROTECTED_ENDPOINT = "/api/v1/test";
 
-    @Container 
-    @ServiceConnection 
+    @Container
+    @ServiceConnection
     private static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:latest");
 
-    @Autowired 
+    @Autowired
     private TestRestTemplate restTemplate;
 
-    @Autowired 
+    @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    @Autowired 
+    @Autowired
     private JwtEncoder jwtEncoder;
 
-    @Autowired 
+    @Autowired
     private ObjectMapper objectMapper;
 
-    @Autowired 
+    @Autowired
     private Flyway flyway;
+
+    @MockitoBean
+    private EmailSenderService emailSenderService;
 
     @BeforeEach
     void setUp() {
@@ -68,21 +79,46 @@ public class AuthControllerIT {
         flyway.migrate();
     }
 
-    // Helpers
+    // ---------- helpers ----------
 
     private ResponseEntity<String> register(String email, String username, String password) {
         String url = REGISTER_ENDPOINT + "?email=" + email + "&username=" + username + "&password=" + password;
         return this.restTemplate.postForEntity(url, null, String.class);
     }
 
-    private ResponseEntity<String> login(String username, String password) {
-        String url = LOGIN_ENDPOINT;
+    /** Registers a user, captures the code handed to EmailSenderService, and verifies with it. */
+    private void registerAndVerify(String email, String username, String password) {
+        this.register(email, username, password);
 
+        ArgumentCaptor<String> codeCaptor = ArgumentCaptor.forClass(String.class);
+        Mockito.verify(this.emailSenderService).sendVerificationCode(eq(email), codeCaptor.capture());
+        String code = codeCaptor.getValue();
+
+        this.verify(email, code);
+    }
+
+    /** Captures and returns the most recent code sent to this email, without asserting anything. */
+    private String captureLastCodeFor(String email) {
+        ArgumentCaptor<String> codeCaptor = ArgumentCaptor.forClass(String.class);
+        Mockito.verify(this.emailSenderService).sendVerificationCode(eq(email), codeCaptor.capture());
+        return codeCaptor.getValue();
+    }
+
+    private ResponseEntity<String> verify(String email, String code) {
+        String url = VERIFY_ENDPOINT + "?email=" + email + "&code=" + code;
+        return this.restTemplate.postForEntity(url, null, String.class);
+    }
+
+    private ResponseEntity<String> resendCode(String email) {
+        String url = RESEND_ENDPOINT + "?email=" + email;
+        return this.restTemplate.postForEntity(url, null, String.class);
+    }
+
+    private ResponseEntity<String> login(String username, String password) {
         HttpHeaders headers = new HttpHeaders();
         headers.setBasicAuth(username, password);
         HttpEntity<Void> request = new HttpEntity<>(headers);
-
-        return this.restTemplate.postForEntity(url, request, String.class);
+        return this.restTemplate.postForEntity(LOGIN_ENDPOINT, request, String.class);
     }
 
     private TokenResponse loginAndParse(String username, String password) {
@@ -105,19 +141,19 @@ public class AuthControllerIT {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hashed = digest.digest(rawToken.getBytes(StandardCharsets.UTF_8));
             return Base64.getUrlEncoder().encodeToString(hashed);
-        } catch(NoSuchAlgorithmException exception) {
+        } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 not available", exception);
         }
     }
 
-    // Register
+    // ---------- register ----------
 
-    @Test 
+    @Test
     void register_newUser_returns201AndPersistsUser() {
         final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
-        
+
         ResponseEntity<String> response = this.register(email, username, password);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
@@ -126,39 +162,52 @@ public class AuthControllerIT {
 
         Integer count = this.jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM users WHERE username = ?", Integer.class, username);
-        
         assertThat(count).isEqualTo(1);
     }
 
-    @Test 
+    @Test
+    void register_sendsVerificationCode() {
+        final String email = "test@test.com";
+        this.register(email, "test", "password");
+
+        String code = this.captureLastCodeFor(email);
+        assertThat(code).matches("\\d{6}");
+    }
+
+    @Test
+    void register_newUser_startsUnverified() {
+        final String email = "test@test.com";
+        final String username = "test";
+        this.register(email, username, "password");
+
+        Boolean verified = this.jdbcTemplate.queryForObject(
+            "SELECT email_verified FROM users WHERE username = ?", Boolean.class, username);
+        assertThat(verified).isFalse();
+    }
+
+    @Test
     void register_grantsRoleUser() {
         final String email = "test@test.com";
         final String username = "test";
-        final String password = "password";
-        
-        this.register(email, username, password);
+        this.register(email, username, "password");
 
         String authority = this.jdbcTemplate.queryForObject(
             "SELECT authority FROM authorities WHERE username = ?", String.class, username);
-        
         assertThat(authority).isEqualTo("ROLE_USER");
     }
 
-    @Test 
+    @Test
     void register_storesBCryptEncodedPassword_notPlainText() {
         final String email = "test@test.com";
         final String username = "test";
-        final String password = "password";
-
-        this.register(email, username, password);
+        this.register(email, username, "password");
 
         String storedPassword = this.jdbcTemplate.queryForObject(
             "SELECT password FROM users WHERE username = ?", String.class, username);
-        
-        assertThat(storedPassword).startsWith("$2"); // BCrypt
+        assertThat(storedPassword).startsWith("$2");
     }
 
-    @Test 
+    @Test
     void register_duplicateDetails_returns409() {
         final String email = "test@test.com";
         final String username = "test";
@@ -171,19 +220,93 @@ public class AuthControllerIT {
 
         Integer count = this.jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM users WHERE username = ?", Integer.class, username);
-        
         assertThat(count).isEqualTo(1);
     }
 
-    // Login
+    // ---------- email verification ----------
 
-    @Test 
-    void login_withValidCredentials_returnsAccessAndRefreshTokens() {
+    @Test
+    void verify_withCorrectCode_marksEmailVerified() {
+        final String email = "test@test.com";
+        final String username = "test";
+        this.register(email, username, "password");
+        String code = this.captureLastCodeFor(email);
+
+        ResponseEntity<String> response = this.verify(email, code);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        Boolean verified = this.jdbcTemplate.queryForObject(
+            "SELECT email_verified FROM users WHERE username = ?", Boolean.class, username);
+        assertThat(verified).isTrue();
+    }
+
+    @Test
+    void verify_withWrongCode_returnsBadRequest() {
+        final String email = "test@test.com";
+        this.register(email, "test", "password");
+
+        ResponseEntity<String> response = this.verify(email, "000000");
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void verify_sameCodeTwice_secondAttemptFails() {
+        final String email = "test@test.com";
+        this.register(email, "test", "password");
+        String code = this.captureLastCodeFor(email);
+
+        assertThat(this.verify(email, code).getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(this.verify(email, code).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void verify_unknownEmail_returnsBadRequest() {
+        ResponseEntity<String> response = this.verify("ghost@test.com", "123456");
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void resendCode_forUnverifiedUser_sendsNewCode() {
+        final String email = "test@test.com";
+        this.register(email, "test", "password");
+
+        ResponseEntity<String> response = this.resendCode(email);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        // sendVerificationCode should now have been called twice total: once at register, once at resend
+        org.mockito.Mockito.verify(this.emailSenderService, org.mockito.Mockito.times(2))
+            .sendVerificationCode(eq(email), org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void resendCode_unknownEmail_stillReturnsOk() {
+        ResponseEntity<String> response = this.resendCode("ghost@test.com");
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    // ---------- login ----------
+
+    @Test
+    void login_beforeEmailVerified_returnsForbidden() {
         final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
         this.register(email, username, password);
+
+        ResponseEntity<String> response = this.login(username, password);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getBody()).contains("EMAIL_NOT_VERIFIED");
+    }
+
+    @Test
+    void login_afterEmailVerified_returnsAccessAndRefreshTokens() {
+        final String email = "test@test.com";
+        final String username = "test";
+        final String password = "password";
+
+        this.registerAndVerify(email, username, password);
 
         TokenResponse tokens = this.loginAndParse(username, password);
 
@@ -192,14 +315,13 @@ public class AuthControllerIT {
         assertThat(tokens.refreshToken()).isNotBlank();
     }
 
-    @Test 
+    @Test
     void login_tokenContainsCorrectSubjectAndScope() {
         final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(email, username, password);
-
+        this.registerAndVerify(email, username, password);
         TokenResponse tokens = this.loginAndParse(username, password);
 
         String[] parts = tokens.accessToken().split("\\.");
@@ -209,13 +331,13 @@ public class AuthControllerIT {
         assertThat(json).contains("ROLE_USER");
     }
 
-    @Test 
-    void login_persistsRefreshTokenHash() throws Exception {
+    @Test
+    void login_persistsRefreshTokenHash() {
         final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(email, username, password);
+        this.registerAndVerify(email, username, password);
         TokenResponse tokens = this.loginAndParse(username, password);
 
         String expectedHash = this.hashRefreshToken(tokens.refreshToken());
@@ -223,39 +345,29 @@ public class AuthControllerIT {
         Integer count = this.jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM refresh_tokens WHERE token_hash = ?", Integer.class, expectedHash);
         assertThat(count).isEqualTo(1);
-
-        String storedHash = this.jdbcTemplate.queryForObject(
-            "SELECT token_hash FROM refresh_tokens WHERE token_hash = ?", String.class, expectedHash);
-        assertThat(storedHash).isNotEqualTo(tokens.refreshToken());
     }
 
-    @Test 
+    @Test
     void login_withWrongPassword_returnsUnauthorized() {
         final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(email, username, password);
+        this.registerAndVerify(email, username, password);
 
         ResponseEntity<String> response = this.login(username, "wrong" + password);
-
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
-    @Test 
+    @Test
     void login_withNonexistentUser_returnsUnauthorized() {
-        final String username = "test";
-        final String password = "password";
-
-        ResponseEntity<String> response = this.login(username, password);
-
+        ResponseEntity<String> response = this.login("test", "password");
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
     @Test
     void login_withoutCredentials_returnsUnauthorized() {
         ResponseEntity<String> response = this.restTemplate.postForEntity(LOGIN_ENDPOINT, null, String.class);
-
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
@@ -266,19 +378,18 @@ public class AuthControllerIT {
         HttpEntity<Void> request = new HttpEntity<>(headers);
 
         ResponseEntity<String> response = this.restTemplate.postForEntity(LOGIN_ENDPOINT, request, String.class);
-
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
-    // Refresh
+    // ---------- refresh ----------
 
-    @Test 
-    void refresh_withValidToken_returnsNewAccessAndRefreshTokens() throws Exception {
+    @Test
+    void refresh_withValidToken_returnsNewAccessAndRefreshTokens() {
         final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(email, username, password);
+        this.registerAndVerify(email, username, password);
         TokenResponse tokens = this.loginAndParse(username, password);
 
         ResponseEntity<String> response = this.refresh(tokens.refreshToken());
@@ -291,13 +402,13 @@ public class AuthControllerIT {
         assertThat(refreshedTokens.refreshToken()).isNotEqualTo(tokens.refreshToken());
     }
 
-    @Test 
-    void refresh_newAccessToken_isAcceptedOnProtectedEndpoint() throws Exception {
+    @Test
+    void refresh_newAccessToken_isAcceptedOnProtectedEndpoint() {
         final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(email, username, password);
+        this.registerAndVerify(email, username, password);
         TokenResponse tokens = this.loginAndParse(username, password);
 
         ResponseEntity<String> response = this.refresh(tokens.refreshToken());
@@ -309,7 +420,7 @@ public class AuthControllerIT {
 
         ResponseEntity<String> protectedResponse = this.restTemplate.exchange(
             TEST_PROTECTED_ENDPOINT, HttpMethod.GET, request, String.class);
-        
+
         assertThat(protectedResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
@@ -319,7 +430,7 @@ public class AuthControllerIT {
         final String username = "test";
         final String password = "password";
 
-        this.register(email, username, password);
+        this.registerAndVerify(email, username, password);
         TokenResponse tokens = this.loginAndParse(username, password);
 
         ResponseEntity<String> refresh1 = this.refresh(tokens.refreshToken());
@@ -329,19 +440,19 @@ public class AuthControllerIT {
         assertThat(refresh2.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
-    @Test 
+    @Test
     void refresh_withUnrecognizedToken_returnsUnauthorized() {
         ResponseEntity<String> response = this.refresh("this-token-was-never-issued");
-
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
-    void refresh_withExpiredToken_returnsUnauthorized() throws Exception {
+    @Test
+    void refresh_withExpiredToken_returnsUnauthorized() {
         final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(email, username, password);
+        this.registerAndVerify(email, username, password);
         TokenResponse tokens = this.loginAndParse(username, password);
 
         String hash = this.hashRefreshToken(tokens.refreshToken());
@@ -350,17 +461,16 @@ public class AuthControllerIT {
             "UPDATE refresh_tokens SET expires_at = ? WHERE token_hash = ?", past, hash);
 
         ResponseEntity<String> response = this.refresh(tokens.refreshToken());
-
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
     @Test
-    void refresh_afterUserLogsInTwice_bothRefreshTokensRemainIndependentlyValid() throws Exception {
+    void refresh_afterUserLogsInTwice_bothRefreshTokensRemainIndependentlyValid() {
         final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(email, username, password);
+        this.registerAndVerify(email, username, password);
         TokenResponse tokens1 = this.loginAndParse(username, password);
         TokenResponse tokens2 = this.loginAndParse(username, password);
 
@@ -373,15 +483,15 @@ public class AuthControllerIT {
         assertThat(refresh2.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
-    // Logout
+    // ---------- logout ----------
 
     @Test
-    void logout_revokesToken_subsequentRefreshFails() throws Exception {
+    void logout_revokesToken_subsequentRefreshFails() {
         final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(email, username, password);
+        this.registerAndVerify(email, username, password);
         TokenResponse tokens = this.loginAndParse(username, password);
 
         ResponseEntity<Void> logoutResponse = this.logout(tokens.refreshToken());
@@ -394,17 +504,16 @@ public class AuthControllerIT {
     @Test
     void logout_withUnknownToken_stillReturnsOk() {
         ResponseEntity<Void> response = this.logout("never-issued-token");
-
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
     @Test
-    void logout_doesNotAffectOtherSessionsForSameUser() throws Exception {
+    void logout_doesNotAffectOtherSessionsForSameUser() {
         final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(email, username, password);
+        this.registerAndVerify(email, username, password);
         TokenResponse tokens1 = this.loginAndParse(username, password);
         TokenResponse tokens2 = this.loginAndParse(username, password);
 
@@ -417,39 +526,41 @@ public class AuthControllerIT {
         assertThat(refresh2.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
-    // Protected Endpoint
-    @Test 
+    // ---------- protected endpoint ----------
+
+    @Test
     void issuedToken_isAcceptedAsBearerTokenOnProtectedEndpoint_returnsOk() {
         final String email = "test@test.com";
         final String username = "test";
         final String password = "password";
 
-        this.register(email, username, password);
+        this.registerAndVerify(email, username, password);
         TokenResponse tokens = this.loginAndParse(username, password);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(tokens.accessToken());
         HttpEntity<Void> request = new HttpEntity<>(headers);
 
-        ResponseEntity<String> response = this.restTemplate.exchange(TEST_PROTECTED_ENDPOINT, HttpMethod.GET, request, String.class); // .getForEntity doesn't accept request
+        ResponseEntity<String> response = this.restTemplate.exchange(
+            TEST_PROTECTED_ENDPOINT, HttpMethod.GET, request, String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
-    @Test 
+    @Test
     void protectedEndpoint_withoutToken_returnsUnauthorized() {
         ResponseEntity<String> response = this.restTemplate.getForEntity(TEST_PROTECTED_ENDPOINT, String.class);
-
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
-    @Test 
+    @Test
     void protectedEndpoint_withMalformedBearerToken_returnsUnauthorized() {
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth("not.a.real-jwt");
         HttpEntity<Void> request = new HttpEntity<>(headers);
 
-        ResponseEntity<String> response = this.restTemplate.exchange(TEST_PROTECTED_ENDPOINT, HttpMethod.GET, request, String.class);
+        ResponseEntity<String> response = this.restTemplate.exchange(
+            TEST_PROTECTED_ENDPOINT, HttpMethod.GET, request, String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
@@ -465,14 +576,15 @@ public class AuthControllerIT {
             .subject("test")
             .claim("scope", "ROLE_USER")
             .build();
-        
+
         String expiredToken = this.jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(expiredToken);
         HttpEntity<Void> request = new HttpEntity<>(headers);
 
-        ResponseEntity<String> response = this.restTemplate.exchange(TEST_PROTECTED_ENDPOINT, HttpMethod.GET, request, String.class);
+        ResponseEntity<String> response = this.restTemplate.exchange(
+            TEST_PROTECTED_ENDPOINT, HttpMethod.GET, request, String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }

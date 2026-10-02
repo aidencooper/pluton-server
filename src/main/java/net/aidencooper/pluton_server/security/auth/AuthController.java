@@ -14,6 +14,9 @@ import net.aidencooper.pluton_server.security.jwt.token.RefreshTokenService;
 import net.aidencooper.pluton_server.security.user.User;
 import net.aidencooper.pluton_server.security.user.UserService;
 
+import java.util.Map;
+import java.util.UUID;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
@@ -42,10 +45,14 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<TokenResponse> login(Authentication authentication) {
+    public ResponseEntity<?> login(Authentication authentication) {
         if(authentication == null || !authentication.isAuthenticated() || authentication instanceof AnonymousAuthenticationToken) 
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         
+        User user = this.userService.loadUserByUsername(authentication.getName());
+        if(!user.isEmailVerified())
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "EMAIL_NOT_VERIFIED", "message", "Please verify your email before logging in"));
+
         String accessToken = this.accessTokenService.generateToken(authentication);
         String refreshToken = this.refreshTokenService.createToken(authentication.getName());
 
@@ -74,8 +81,6 @@ public class AuthController {
         this.refreshTokenService.revoke(refreshToken);
         return ResponseEntity.ok().build();
     }
-    
-    
 
     @PostMapping("/register")
     public ResponseEntity<String> register(@RequestParam String email, @RequestParam String username, @RequestParam String password) {
@@ -89,26 +94,37 @@ public class AuthController {
             .build();
 
         this.userService.createUser(user);
-        return ResponseEntity.status(HttpStatus.CREATED).body("Registered: " + email + " " + username);
+
+        String code = this.emailVerificationService.generateCode(user.getId());
+        this.emailSenderService.sendVerificationCode(user.getEmail(), code);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body("Registered: " + email + " " + username + ". Check your email for a verification code.");
     }
     
-    @PostMapping("/email/send-code")
-    public ResponseEntity<String> sendVerificationCode(Authentication authentication) {
-        User user = this.userService.loadUserByUsername(authentication.getName());
-        String code = this.emailVerificationService.generateCode(user.getId());
+    @PostMapping("/email/resend-code")
+    public ResponseEntity<?> resendVerificationCode(@RequestParam String email) {
+        Map<String, Object> userRow = this.emailVerificationService.findUserByEmail(email);
 
-        this.emailSenderService.sendVerificationCode(user.getEmail(), code);
+        if(userRow == null) return ResponseEntity.ok().build();
+        if((boolean) userRow.get("email_verified")) return ResponseEntity.ok().build();
+
+        UUID userId = (UUID) userRow.get("id");
+        String code = this.emailVerificationService.generateCode(userId);
+        this.emailSenderService.sendVerificationCode(email, code);
+
         return ResponseEntity.ok().build();
     }
     
     @PostMapping("/email/verify")
-    public ResponseEntity<String> verifyCode(Authentication authentication, @RequestParam String code) {
-        User user = this.userService.loadUserByUsername(authentication.getName());
+    public ResponseEntity<String> verifyCode(@RequestParam String email, @RequestParam String code) {
+        Map<String, Object> userRow = this.emailVerificationService.findUserByEmail(email);
+        if(userRow == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid email or code");
 
+        UUID userId = (UUID) userRow.get("id");
         try {
-            this.emailVerificationService.verifyCode(user.getId(), code);
+            this.emailVerificationService.verifyCode(userId, code);
             return ResponseEntity.ok().build();
-        } catch(InvalidVerificationCodeException exception) {
+        } catch (InvalidVerificationCodeException exception) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(exception.getMessage());
         }
     }

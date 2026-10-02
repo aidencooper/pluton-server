@@ -65,4 +65,11 @@ public class EmailVerificationService {
             userId
         );
     }
+
+    public Map<String, Object> findUserByEmail(String email) {
+        List<Map<String, Object>> rows = this.jdbcTemplate.queryForList(
+            "SELECT id, email_verified FROM users WHERE email = ?", email
+        );
+        return rows.isEmpty() ? null : rows.get(0);
+    }
 }

@@ -18,19 +18,19 @@ repositories {
 }
 
 dependencies {
-	// JDBC
+	// Spring JDBC
 	implementation("org.springframework.boot:spring-boot-starter-data-jdbc")
 	testImplementation("org.springframework.boot:spring-boot-starter-data-jdbc-test")
 
-	// Rest Client
+	// Spring Rest Client
 	implementation("org.springframework.boot:spring-boot-starter-restclient")
 	testImplementation("org.springframework.boot:spring-boot-starter-restclient-test")
 	
-	// Web MVC
+	// Spring Web MVC
 	implementation("org.springframework.boot:spring-boot-starter-webmvc")
 	testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
 
-	// Docker Compose
+	// Spring Docker Compose
 	developmentOnly("org.springframework.boot:spring-boot-docker-compose")
 
 	// Test Containers
@@ -63,8 +63,10 @@ dependencies {
 	// Actuator
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
 
-	// Email
+	// Mail
 	implementation("org.springframework.boot:spring-boot-starter-mail")
+	testImplementation("com.icegreen:greenmail:2.1.14")
+	
 }
 
 // JUnit
