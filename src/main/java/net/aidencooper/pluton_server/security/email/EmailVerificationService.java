@@ -34,7 +34,7 @@ public class EmailVerificationService {
             UUID.randomUUID(), userId, codeHash, Timestamp.from(expiresAt)
         );
 
-        return codeHash;
+        return rawCode;
     }
 
     public void verifyCode(UUID userId, String rawCode) {
