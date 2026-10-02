@@ -45,5 +45,5 @@ CREATE TABLE email_verification_codes (
     consumed BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at TIMESTAMPTZ NOT NULL
-)
+);
 CREATE INDEX ix_email_verification_codes_user_id ON email_verification_codes (user_id);

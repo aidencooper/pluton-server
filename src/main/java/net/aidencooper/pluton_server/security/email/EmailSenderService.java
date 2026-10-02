@@ -7,16 +7,16 @@ import org.springframework.stereotype.Service;
 @Service 
 public class EmailSenderService {
     private final JavaMailSender mailSender;
-    private final String fromAddress;
+    private final EmailProperties emailProperties;
 
-    public EmailSenderService(JavaMailSender mailSender, String fromAddress) {
+    public EmailSenderService(JavaMailSender mailSender, EmailProperties emailProperties) {
         this.mailSender = mailSender;
-        this.fromAddress = fromAddress;
+        this.emailProperties = emailProperties;
     }
 
     public void sendVerificationCode(String to, String code) {
         SimpleMailMessage email = new SimpleMailMessage();
-        email.setFrom(this.fromAddress);
+        email.setFrom(this.emailProperties.fromAddress());
         email.setTo(to);
         email.setSubject("Your Pluton verification code");
         email.setText("Your verification code is: " + code);
